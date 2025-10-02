@@ -2,5 +2,7 @@
     "name": "${modName}",
     "entry": "${modFile}",
     "version": "${modVersion}",
+    "author": "Puce",
+	"description": "加速火焰蔓延，支持火焰无限蔓延",
     "type": "native"
 }

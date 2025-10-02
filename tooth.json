@@ -4,7 +4,7 @@
     "tooth": "example.com/my-user/my-mod",
     "version": "0.0.0",
     "info": {
-        "name": "My Mod",
+        "name": "my-mod",
         "description": "Description of my mod",
         "tags": [
             "platform:levilamina",
