@@ -11,14 +11,10 @@
 #include "ll/api/service/Bedrock.h"
 #include "ll/api/thread/ServerThreadExecutor.h"
 #include "ll/api/utils/ErrorUtils.h"
-
 #include "mc/world/level/Level.h"
 #include "mc/world/level/block/Block.h"
-#include "mc/world/level/block/FireBlock.h"
 #include "mc/world/level/dimension/Dimension.h"
 #include "mc/world/level/BlockPos.h"
-
-#include <string_view>
 
 using namespace ll::literals::chrono_literals;
 
@@ -36,7 +32,7 @@ LL_TYPE_INSTANCE_HOOK(
     [[maybe_unused]] BlockPos const&,
     [[maybe_unused]] unsigned char,
     [[maybe_unused]] Actor*) {
-    return false;
+    return !InfiniteFireMod::getInstance().getConfig().keepFireBurning;
 }
 
 struct Impl {
@@ -48,12 +44,9 @@ struct Impl {
     ll::coro::CoroTask<> startUpdateTask() const {
         *mIsTaskRunning = true;
         while (*mIsTaskRunning) {
-            if (!InfiniteFireMod::getInstance().getConfig().isSpreadEnabled) {
-                co_await 20_tick;
-                continue;
-            }
+            auto& config = InfiniteFireMod::getInstance().getConfig();
 
-            co_await 1_tick;
+            co_await ll::chrono::ticks(config.accelerationTick);
 
             auto level = ll::service::getLevel();
             if (!level) continue;
@@ -61,34 +54,17 @@ struct Impl {
             auto dimension = level->getDimension(0).lock();
             if (!dimension) continue;
 
-            auto& const_region = dimension->getBlockSourceFromMainChunkSource();
-            auto& region       = const_cast<BlockSource&>(const_region);
+            auto& region = const_cast<BlockSource&>(dimension->getBlockSourceFromMainChunkSource());
+            auto& random = level->getThreadRandom();
 
-            auto fireBlock = Block::tryGetFromRegistry(std::string_view{"minecraft:fire"});
-            if (!fireBlock) continue;
-
-            auto& fireBlockType = static_cast<FireBlock const&>(fireBlock->getBlockType());
-
-            std::vector<BlockPos> newFires;
-
-            for (const auto& pos : gFirePositions) {
-                for (int x = -1; x <= 1; ++x) {
-                    for (int y = -1; y <= 1; ++y) {
-                        for (int z = -1; z <= 1; ++z) {
-                            if (x == 0 && y == 0 && z == 0) continue;
-                            BlockPos neighborPos = pos + BlockPos{x, y, z};
-                            if (region.getBlock(neighborPos).isAir() && fireBlockType.getFireOdds(region, neighborPos) > 0) {
-                                newFires.push_back(neighborPos);
-                            }
-                        }
+            auto positions_copy = gFirePositions;
+            for (const auto& pos : positions_copy) {
+                auto const& block = region.getBlock(pos);
+                if (block.getTypeName() == "minecraft:fire") {
+                    for (int i = 0; i < config.accelerationFactor; ++i) {
+                        block.queuedTick(region, pos, random);
                     }
                 }
-            }
-
-            if (newFires.empty()) continue;
-
-            for (const auto& newPos : newFires) {
-                region.setBlock(newPos, *fireBlock, 3, nullptr, nullptr);
             }
         }
         co_return;
@@ -127,7 +103,6 @@ bool InfiniteFireMod::load() {
         ll::error_utils::printCurrentException(getSelf().getLogger());
     }
     saveConfig();
-    
     getSelf().getLogger().info("InfiniteFire loaded!");
     return true;
 }
