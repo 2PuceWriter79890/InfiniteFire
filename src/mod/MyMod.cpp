@@ -53,7 +53,7 @@ struct Impl {
                 continue;
             }
 
-            co_await 10_tick;
+            co_await 1_tick;
 
             auto level = ll::service::getLevel();
             if (!level) continue;
